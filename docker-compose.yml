@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  frontend-dev:
+    build:
+      context: ./../client
+      dockerfile: ./../client/Dockerfile
+      target: development
+      args:
+        - "NODE_ENV=development"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./../client:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true
+      - NEXT_PUBLIC_API_URL=http://host.docker.internal:3001
+    networks:
+      - default
+
+  frontend-prod:
+    build:
+      context: ./../client
+      dockerfile: ./../client/Dockerfile
+      target: production
+      args:
+        - "NODE_ENV=production"
+    ports:
+      - "3000:3000"
+    networks:
+      - default
+
+  backend:
+    build:
+      context: ./../server
+      dockerfile: ./../server/Dockerfile
+    ports:
+      - "3001:3001"
+    depends_on:
+      - postgres
+      - redis
+      - garrage
+    networks:
+      - default
+
+  postgres:
+    image: postgres:latest
+    restart: unless-stopped
+    shm_size: 128mb
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: ceomis
+    
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    
+    ports:
+      - "5432:5432"
+    networks:
+      - default
+
+  adminer:
+    image: adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+  redis:
+    image: redis:latest
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "redis"]
+    volumes:
+      - redis_data:/usr/local/etc/redis
+    ports:
+      - "6379:6379"
+
+  garrage:
+    image: dxflrs/garage:v2.0.0
+    restart: unless-stopped
+    ports:
+      - "3900:3900"  # S3 API
+      - "3901:3901"  # RPC (needed for admin commands)
+      - "3902:3902"
+      # - "3903:3903"
+    volumes:
+      - garage_data:/var/lib/garage
+      - ./../server/garage-config/garage.toml:/etc/garage.toml
+    networks:
+      - default
+
+  # garage-webui:
+  #   image: khairul169/garage-webui:latest
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3909:3909"  # Web UI
+  #   environment:
+  #     S3_REGION: "garage"
+  #     API_BASE_URL: "http://garrage:3903/v2"
+  #     API_ADMIN_KEY: "F876F9A2E9BA1DE148E55D4D12A8F"
+  #     S3_ENDPOINT_URL: "http://garrage:3900"
+  #     AUTH_USER_PASS: "admin:password123"
+  #   volumes:
+  #     - ./garage-config/garage.toml:/etc/garage.toml:ro
+  #   depends_on:
+  #     - garrage
+  #   networks:
+  #     - default
+
+
+volumes:
+  postgres_data:
+  redis_data:
+  garage_data:
+
+networks:
+  default:
+    driver: bridge
